@@ -1,0 +1,103 @@
+---
+title: "STAT505 Data Analysis Overview"
+output: pdf_document
+---
+
+One interesting characteristic of Severe Acute Respiratory Syndrome coronavirus 2 (SARS-CoV-2), the virus that causes COVID-19, is the prevalence of asymptomatic cases and the ability of asymptomatic carriers to infect others. While there are many public health implications of asymptomatic spread, this question will explore clinical and immunological measurements of symptomatic and asymptomatic patients. Specifically of interest will be antibodies which are proteins in the blood that develop to neutralize, in this case, the SARS-CoV-2 virus. Furthermore, the presence of antibodies is commonly linked with immunity to future infections.
+
+An recent article published in Nature Medicine titled _Clinical and immunological assessment of asymptomatic SARS-CoV-2 infections_ contains a comparative study of symptomatic and asymptomatic patients. The paper freely available at the __[following link](https://www.nature.com/articles/s41591-020-0965-6)__. 
+
+__NOTE: A question motivated by this dataset was on the Fall 2020 comprehensive exams.__
+
+#### 1. Download Data
+
+```{r read.data, warning = F, echo = T}
+library(tidyverse)
+Covid_data <- read_csv("http://math.montana.edu/ahoegh/Data/Covid_3a.csv")
+
+```
+
+#### 2. View a few rows of the dataset.
+
+```{r}
+Covid_data
+```
+
+
+#### 3. Research Question formulation
+
+_Note for writing in this class and the entire MS/PhD Stats program, I'd highly recommend Writing Science by Schimel._
+
+Often this step will be done collaboratively with other researchers or scientists. For now, lets assume the research question is  "are differences in the IgG antibodies between the symptomatic or asymptomatic group?"
+
+__Q: how do we feel about this question? Is it specific enough and answerable with the data?__
+
+#### 4. Data Visualization
+
+Next, we explore the raw data using `ggplot2.`
+
+```{r, fig.align = 'center'}
+cb_pal <- c("#000000", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7") # colorblind friendly pallete
+
+Covid_data  %>% mutate(log_IgG = log(`IgG S/CO`)) %>%
+  ggplot(aes(y=log_IgG, x = Group, color = Group)) + 
+  geom_violin(width = .8) + 
+  geom_boxplot(width = .1, outlier.shape = NA) +
+  theme_bw() +
+  theme(legend.position = 'none')  +  scale_colour_manual(values=cb_pal) + 
+  geom_jitter(aes(shape = `IgG (+/-)`)) + 
+  ylab('log antibody level ') + 
+  xlab('') + 
+  ggtitle('Comparison of log antibody levels by group for the acute test phase') + 
+  geom_hline(yintercept = log(1), linetype = 3) +
+  labs(caption = "Dashed line is the threshold for seropositive results.") 
+```
+
+
+#### 5. Refined Research Question
+
+Generally, the discussions that I hear are focused on whether patients are immune. So I'm going to focus on the proportion of seropositive patients by group.
+
+#### 6. Model Specification
+
+For binary data, a common approach is to use logistic regression. With logistic regression,
+
+\begin{align}
+y_i  &\sim Bernoulli(p_i)\\
+logit(p_i) & = X_i \beta,
+\end{align}
+
+where $y_i$ is a binary variable for whether the $i^{th}$ observation is a seropositive, $p_i$ is the probability that the $i^{th}$ observation is a success, $$X_i =
+\begin{bmatrix}
+I(Group[1] = Asymptomatic) & I(Group[1] = Symptomatic) \\
+I(Group[2] = Asymptomatic) & I(Group[2] = Symptomatic) \\
+I(Group[n] = Asymptomatic) & I(Group[n] = Asymptomatic)
+\end{bmatrix}$$ 
+is a $n \times 2$ matrix of covariates, where $I(Group[i] = Asymptotic)$ is an indicator function for whether $i^{th}$ patient is in the asymptotic group, and $$\beta = \begin{bmatrix} \beta_0 \\
+\beta_1
+\end{bmatrix},$$ is an $n \times 1$ matrix, or vector, of covariates. $logit^{-1}(\beta_0)$ is the probability of a seropositive individual in the Asymptomatic group and $logit^{-1}(\beta_1)$ is the probability of a seropositive individual in the Symptomatic group. _Note this is the cell means model. This can also be formulated as a reference case model._
+
+#### 7. Model Fit
+
+We fit this model using two different R functions. The first approach uses the `glm()` function.
+
+```{r, message = F}
+library(arm)
+Covid_data <- Covid_data %>% mutate(seropositive = `IgG (+/-)` == '+' )
+glm_fit <- glm(seropositive ~ Group - 1, data = Covid_data, family = binomial(link = "logit"))
+display(glm_fit)
+```
+
+A second approach, with is featured prominently in the textbook, uses `stan_glm()`.
+
+```{r, message = F, warning = F}
+library(rstanarm)
+glm_stanfit <- stan_glm(seropositive ~ Group - 1, data = Covid_data, family = binomial(link = "logit"), refresh = 0)
+print(glm_stanfit, digits = 2)
+```
+
+We see that the results are very similar (more later) for both functions and, furthermore, there is not a substantial difference (more later here too) between the two groups.
+
+
+
